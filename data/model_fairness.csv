@@ -1,0 +1,3 @@
+demographic_group,applicants,actual_default_rate,predicted_default_rate,recall,false_positive_rate
+Group A,687,0.171761281,0.072780204,0.279661017,0.029876977
+Group B,563,0.142095915,0.072824156,0.2375,0.045548654

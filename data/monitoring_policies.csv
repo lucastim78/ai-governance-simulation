@@ -1,0 +1,5 @@
+policy_id,metric,threshold
+M001,max_missing_rate,0.05
+M002,max_invalid_rate,0.02
+M003,max_psi,0.2
+M004,min_auc,0.75

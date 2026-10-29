@@ -1,0 +1,6 @@
+policy_id,metric,threshold,description
+P001,auc,0.75,Minimum acceptable model discrimination
+P002,precision,0.5,Minimum acceptable precision
+P003,recall,0.5,Minimum acceptable recall
+P004,recall_gap,0.1,Maximum permitted recall disparity
+P005,false_positive_rate_gap,0.05,Maximum permitted false positive rate disparity

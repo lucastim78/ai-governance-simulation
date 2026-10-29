@@ -1,0 +1,7 @@
+feature,mean_absolute_shap
+credit_score,0.098667108
+debt_to_income,0.056892765
+annual_income,0.037094917
+loan_amount,0.035247649
+employment_years,0.026891437
+age,0.009469831
