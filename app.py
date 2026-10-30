@@ -63,6 +63,8 @@ def load_table(table_name):
         "model_performance",
         "model_fairness_summary",
         "governance_policies",
+        "model_feature_importance",
+        "model_fairness",
     }
 
     if table_name not in allowed_tables:
@@ -491,6 +493,61 @@ if (
 
 performance = performance_df.iloc[0]
 fairness = fairness_df.iloc[0]
+
+
+def generate_module5_pdf(student_name, importance, fairness_groups, selections):
+    """Build the student's Module 5 assessment in memory only."""
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=(8.5 * inch, 11 * inch),
+                            rightMargin=48, leftMargin=48,
+                            topMargin=48, bottomMargin=48)
+    styles = getSampleStyleSheet()
+    body = styles["BodyText"]
+    body.fontSize = 9
+    body.leading = 13
+    story = []
+
+    def paragraph(value):
+        story.append(Paragraph(escape(str(value)).replace("\n", "<br/>"), body))
+        story.append(Spacer(1, 7))
+
+    def section(label):
+        story.append(Spacer(1, 9))
+        story.append(Paragraph(escape(label), styles["Heading2"]))
+
+    story.append(Paragraph("Module 5 — Explainability & Fairness Assessment", styles["Title"]))
+    paragraph(f"Student: {student_name} | Date: {datetime.now().strftime('%B %d, %Y')}")
+    paragraph("Educational simulation using synthetic lending data. "
+              "The app uses precomputed model evidence; it does not retrain the model.")
+
+    section("1. Model evidence")
+    paragraph("Global SHAP feature importance (mean absolute SHAP):")
+    for _, row in importance.head(12).iterrows():
+        paragraph(f"{row['feature']}: {float(row['mean_absolute_shap']):.4f}")
+    section("2. Fairness evidence")
+    paragraph("Group-level evaluation data as supplied by the simulation:")
+    for _, row in fairness_groups.head(30).iterrows():
+        paragraph(" | ".join(f"{column}: {row[column]}" for column in fairness_groups.columns))
+    for title, key in [
+        ("3. Explainability investigation", "feature_review"),
+        ("Flagged features", "flagged_features"),
+        ("4. Fairness investigation", "fairness_review"),
+        ("Additional evidence requested", "evidence_requests"),
+        ("5. Mitigation plan", "mitigations"),
+        ("Safeguard justification", "mitigation_rationale"),
+        ("6. Committee assessment", "risk_rating"),
+        ("Committee recommendation", "recommendation"),
+        ("Decision rationale", "decision_rationale"),
+    ]:
+        section(title)
+        value = selections.get(key, "")
+        paragraph(", ".join(value) if isinstance(value, list) else value)
+    paragraph("This assessment is a student recommendation, not authorization to deploy a model.")
+    doc.build(story)
+    result = buffer.getvalue()
+    buffer.close()
+    return result
+
 
 
 # ============================================================
@@ -937,18 +994,179 @@ if module == "Module 4: Governance Framework":
 
 
 # ============================================================
-# MODULE 5 PLACEHOLDER
+# MODULE 5: EXPLAINABILITY, FAIRNESS, AND RISK MITIGATION
 # ============================================================
 
 elif module == "Module 5: Performance & Explainability":
-
-    st.header("Module 5: Performance & Explainability")
-
-    st.info(
-        "Coming next: Interactive model performance analysis, "
-        "fairness investigation, SHAP feature importance, "
-        "and model explainability."
+    st.header("Module 5: Explainability, Fairness & Risk Mitigation")
+    st.markdown(
+        "**Your role:** You are an AI Governance Committee member investigating "
+        "the same synthetic lending model from Module 4. Review existing evidence, "
+        "identify gaps, and recommend safeguards. **Estimated time:** 25–35 minutes."
     )
+    st.info("The evidence shown here was calculated before deployment of this "
+            "teaching app. Selecting features or safeguards does not change the model.")
+
+    try:
+        importance_df = load_table("model_feature_importance")
+        group_df = load_table("model_fairness")
+    except Exception as exc:
+        st.error(f"Module 5 data could not be loaded: {exc}")
+        st.stop()
+
+    if importance_df.empty or group_df.empty:
+        st.error("Module 5 requires nonempty feature-importance and fairness CSV files.")
+        st.stop()
+
+    required_importance = {"feature", "mean_absolute_shap"}
+    if not required_importance.issubset(importance_df.columns):
+        st.error("model_feature_importance.csv must include 'feature' and "
+                 "'mean_absolute_shap'. Available columns: "
+                 + ", ".join(importance_df.columns))
+        st.stop()
+
+    importance_df = importance_df.copy()
+    importance_df["mean_absolute_shap"] = pd.to_numeric(
+        importance_df["mean_absolute_shap"], errors="coerce")
+    importance_df = importance_df.dropna(subset=["feature", "mean_absolute_shap"])
+    importance_df = importance_df.sort_values("mean_absolute_shap", ascending=False)
+    if importance_df.empty:
+        st.error("No usable SHAP importance values were found.")
+        st.stop()
+
+    explain_tab, fairness_tab, mitigation_tab, submit_tab = st.tabs([
+        "1. Explore Explanations", "2. Investigate Fairness",
+        "3. Develop Mitigation Plan", "4. Submit Assessment"
+    ])
+
+    with explain_tab:
+        st.subheader("Global feature importance")
+        st.caption("Mean absolute SHAP indicates the average magnitude of a feature's "
+                   "contribution across the evaluated predictions. It does not indicate "
+                   "direction, causality, or explain an individual applicant's outcome.")
+        st.bar_chart(importance_df.set_index("feature")["mean_absolute_shap"])
+        chosen_feature = st.selectbox("Investigate a feature", importance_df["feature"].astype(str).tolist(),
+                                      key="m5_feature")
+        chosen_row = importance_df.loc[importance_df["feature"].astype(str) == chosen_feature].iloc[0]
+        st.metric("Mean absolute SHAP importance", f"{chosen_row['mean_absolute_shap']:.4f}")
+        st.write("Consider whether this variable is understandable, appropriately documented, "
+                 "or might act as a proxy for sensitive information. Importance alone does not "
+                 "establish that a feature is inappropriate.")
+        flagged_features = st.multiselect(
+            "Flag features for governance investigation (select any that warrant review)",
+            importance_df["feature"].astype(str).tolist(), key="m5_flagged_features")
+        feature_review = st.text_area(
+            "Explain your main explainability concern and why the selected feature(s) merit review.",
+            height=130, key="m5_feature_review")
+
+    with fairness_tab:
+        st.subheader("Group-level fairness evaluation")
+        st.caption("These are precomputed evaluation results. Group disparities can indicate "
+                   "areas for investigation but do not independently establish discrimination.")
+        st.dataframe(group_df, hide_index=True, use_container_width=True)
+        numeric_columns = [col for col in group_df.columns
+                           if pd.api.types.is_numeric_dtype(group_df[col])]
+        group_columns = [col for col in group_df.columns if col not in numeric_columns]
+        if numeric_columns and group_columns:
+            metric_choice = st.selectbox("Compare a group-level measure", numeric_columns,
+                                         key="m5_fairness_metric")
+            label_choice = st.selectbox("Group label", group_columns,
+                                        key="m5_fairness_group")
+            chart_df = group_df[[label_choice, metric_choice]].dropna()
+            if not chart_df.empty:
+                st.bar_chart(chart_df.set_index(label_choice)[metric_choice])
+        st.markdown("**Overall disparities from the original evaluation**")
+        fc1, fc2 = st.columns(2)
+        fc1.metric("Recall disparity", f"{float(fairness['recall_gap']):.3f}")
+        fc2.metric("False positive rate disparity",
+                   f"{float(fairness['false_positive_rate_gap']):.3f}")
+        fairness_review = st.text_area(
+            "Which fairness findings concern you most? Discuss implications and limitations of the evidence.",
+            height=130, key="m5_fairness_review")
+        evidence_requests = st.multiselect(
+            "What additional evidence would you request?",
+            ["Group sample sizes and uncertainty intervals",
+             "Performance across additional relevant groups and intersections",
+             "Review of feature proxies and data collection practices",
+             "Outcome and error analysis by lending use case",
+             "Independent legal/compliance review",
+             "Local explanations for representative and adverse cases"],
+            key="m5_evidence_requests")
+
+    with mitigation_tab:
+        st.subheader("Develop a governance mitigation plan")
+        st.write("Choose safeguards that address the concerns you identified. "
+                 "Each choice has costs and limitations; selecting every option is not necessarily best.")
+        mitigations = st.multiselect(
+            "Recommended safeguards",
+            ["Targeted fairness testing before further review",
+             "Independent explainability and proxy-feature audit",
+             "Review feature inclusion and data provenance",
+             "Human review of adverse lending decisions",
+             "Document model limitations and intended-use restrictions",
+             "Require additional model development and re-evaluation",
+             "Establish fairness and performance monitoring with escalation"],
+            key="m5_mitigations")
+        mitigation_rationale = st.text_area(
+            "Explain why your selected safeguards are appropriate and what risks remain.",
+            height=130, key="m5_mitigation_rationale")
+        risk_rating = st.radio("Overall risk rating", ["Low", "Moderate", "High"],
+                               index=None, key="m5_risk_rating", horizontal=True)
+        recommendation = st.radio(
+            "Committee recommendation",
+            ["Proceed to further review with safeguards",
+             "Require remediation and additional evidence before proceeding",
+             "Reject the model for the proposed use"],
+            index=None, key="m5_recommendation")
+
+    with submit_tab:
+        st.subheader("Model Explainability & Fairness Assessment")
+        student_name_m5 = st.text_input("Student name", key="m5_student_name")
+        decision_rationale = st.text_area(
+            "Summarize your recommendation using the model evidence, explainability "
+            "findings, fairness risks, and proposed safeguards.",
+            height=160, key="m5_decision_rationale")
+        st.write("**Assessment checklist**")
+        required = {
+            "Student name": student_name_m5,
+            "Explainability investigation": feature_review,
+            "Fairness investigation": fairness_review,
+            "Additional evidence requested": evidence_requests,
+            "Safeguard selection": mitigations,
+            "Safeguard justification": mitigation_rationale,
+            "Risk rating": risk_rating,
+            "Committee recommendation": recommendation,
+            "Decision rationale": decision_rationale,
+        }
+        missing = [name for name, value in required.items() if not value or not str(value).strip()]
+        if missing:
+            st.info("Complete these items to enable your PDF: " + ", ".join(missing))
+        else:
+            answers = {
+                "feature_review": feature_review,
+                "flagged_features": flagged_features,
+                "fairness_review": fairness_review,
+                "evidence_requests": evidence_requests,
+                "mitigations": mitigations,
+                "mitigation_rationale": mitigation_rationale,
+                "risk_rating": risk_rating,
+                "recommendation": recommendation,
+                "decision_rationale": decision_rationale,
+            }
+            try:
+                pdf_data_m5 = generate_module5_pdf(
+                    student_name_m5, importance_df, group_df, answers)
+                safe_name_m5 = "".join(c for c in student_name_m5.strip().replace(" ", "_")
+                                       if c.isalnum() or c in "_-") or "Student"
+                st.download_button("📄 Download Module 5 Assessment (PDF)",
+                                   data=pdf_data_m5,
+                                   file_name=f"Module5_Explainability_Fairness_{safe_name_m5}.pdf",
+                                   mime="application/pdf", type="primary")
+            except Exception as exc:
+                st.error(f"Unable to generate Module 5 PDF: {exc}")
+        st.caption("Responses are held in your browser session, not permanently saved. "
+                   "Download the PDF before closing the app. "
+                   "This assessment is not model deployment approval.")
 
 
 # ============================================================
