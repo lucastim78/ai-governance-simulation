@@ -1283,7 +1283,248 @@ elif module == "Module 6: Guardrails & Monitoring":
         )
 
         scenario_df = monitoring_scenarios[selected_scenario]
+        # ----------------------------------------------------
+        # CONSOLIDATED MONITORING GUARDRAIL SUMMARY
+        # ----------------------------------------------------
 
+        st.markdown("### Monitoring Guardrail Summary")
+
+        st.caption(
+            "This dashboard compares the selected scenario "
+            "with established monitoring thresholds. "
+            "Alerts indicate issues requiring governance review, "
+            "not automatic decisions to suspend the model."
+        )
+
+        baseline_summary = monitoring_scenarios["Normal Operations"]
+        current_summary = scenario_df
+
+        # Classroom validation assumptions.
+        summary_rules = {
+            "age": (18, 100),
+            "annual_income": (0, None),
+            "credit_score": (300, 850),
+            "loan_amount": (0, None),
+            "debt_to_income": (0, 1),
+            "employment_years": (0, 80),
+        }
+
+        # M001: Missing data
+        summary_fields = [
+            "age", "annual_income", "credit_score",
+            "loan_amount", "debt_to_income",
+            "employment_years", "demographic_group",
+        ]
+
+        available_summary_fields = [
+            c for c in summary_fields
+            if c in current_summary.columns
+        ]
+
+        missing_value = None
+
+        if available_summary_fields and not current_summary.empty:
+            summary_data = current_summary[available_summary_fields]
+            missing_value = (
+                summary_data.isna().sum().sum()
+                / summary_data.size
+            )
+
+        # M002: Invalid records
+        invalid_value = None
+
+        if not current_summary.empty:
+            invalid_mask = pd.Series(
+                False, index=current_summary.index
+            )
+
+            for field, (minimum, maximum) in summary_rules.items():
+                if field not in current_summary.columns:
+                    continue
+
+                numeric_values = pd.to_numeric(
+                    current_summary[field], errors="coerce"
+                )
+
+                invalid_field = (
+                    numeric_values.notna()
+                    & (numeric_values < minimum)
+                )
+
+                if maximum is not None:
+                    invalid_field = invalid_field | (
+                        numeric_values.notna()
+                        & (numeric_values > maximum)
+                    )
+
+                invalid_mask = invalid_mask | invalid_field
+
+            invalid_value = invalid_mask.mean()
+
+        # M003: Population Stability Index
+        # Calculate PSI locally so this summary can appear
+        # before the detailed evidence dashboard.
+
+        import numpy as np
+
+        def summary_psi(reference, observed, bins=10):
+            reference = pd.to_numeric(
+                reference, errors="coerce"
+            ).dropna()
+
+            observed = pd.to_numeric(
+                observed, errors="coerce"
+            ).dropna()
+
+            if len(reference) < 2 or len(observed) < 2:
+                return None
+
+            edges = np.unique(
+                np.quantile(
+                    reference,
+                    np.linspace(0, 1, bins + 1),
+                )
+            )
+
+            if len(edges) < 2:
+                return None
+
+            edges[0] = -np.inf
+            edges[-1] = np.inf
+
+            ref_counts, _ = np.histogram(
+                reference, bins=edges
+            )
+            obs_counts, _ = np.histogram(
+                observed, bins=edges
+            )
+
+            epsilon = 0.0001
+
+            ref_pct = np.maximum(
+                ref_counts / ref_counts.sum(), epsilon
+            )
+            obs_pct = np.maximum(
+                obs_counts / obs_counts.sum(), epsilon
+            )
+
+            return float(np.sum(
+                (obs_pct - ref_pct)
+                * np.log(obs_pct / ref_pct)
+            ))
+
+        psi_values = []
+
+        for feature in [
+            "credit_score",
+            "annual_income",
+            "debt_to_income",
+            "loan_amount",
+            "employment_years",
+        ]:
+            if (
+                feature in baseline_summary.columns
+                and feature in current_summary.columns
+            ):
+                value = summary_psi(
+                    baseline_summary[feature],
+                    current_summary[feature],
+                )
+                if value is not None:
+                    psi_values.append(value)
+
+        max_psi_value = max(psi_values) if psi_values else None
+
+        def guardrail_status(value, threshold, direction="max"):
+            if value is None:
+                return "Not Evaluated"
+
+            if direction == "max":
+                return (
+                    "ALERT" if value > threshold
+                    else "Within Threshold"
+                )
+
+            return (
+                "ALERT" if value < threshold
+                else "Within Threshold"
+            )
+
+        guardrail_summary = pd.DataFrame([
+            {
+                "Policy": "M001 - Missing Data",
+                "Observed": (
+                    f"{missing_value:.2%}"
+                    if missing_value is not None
+                    else "Unavailable"
+                ),
+                "Threshold": "5% maximum",
+                "Status": guardrail_status(
+                    missing_value, 0.05
+                ),
+            },
+            {
+                "Policy": "M002 - Invalid Data",
+                "Observed": (
+                    f"{invalid_value:.2%}"
+                    if invalid_value is not None
+                    else "Unavailable"
+                ),
+                "Threshold": "2% maximum",
+                "Status": guardrail_status(
+                    invalid_value, 0.02
+                ),
+            },
+            {
+                "Policy": "M003 - Data Drift (Max PSI)",
+                "Observed": (
+                    f"{max_psi_value:.4f}"
+                    if max_psi_value is not None
+                    else "Unavailable"
+                ),
+                "Threshold": "0.20 maximum",
+                "Status": guardrail_status(
+                    max_psi_value, 0.20
+                ),
+            },
+            {
+                "Policy": "M004 - Model AUC",
+                "Observed": "Unavailable",
+                "Threshold": "0.75 minimum",
+                "Status": "Not Evaluated",
+            },
+        ])
+
+        st.dataframe(
+            guardrail_summary,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        alert_count = (
+            guardrail_summary["Status"] == "ALERT"
+        ).sum()
+
+        if alert_count:
+            st.error(
+                f"{alert_count} monitoring guardrail(s) "
+                "exceeded their thresholds."
+            )
+        else:
+            st.info(
+                "No evaluated guardrails exceeded their "
+                "thresholds. Review unevaluated metrics "
+                "before drawing conclusions."
+            )
+
+        st.markdown(
+            """
+            **Governance investigation:** Which alerts require
+            action? What additional evidence would you need?
+            Does the situation warrant continued operation,
+            increased monitoring, or restrictions?
+            """
+        )
         st.markdown("### Scenario Evidence")
 
         st.dataframe(
@@ -1291,6 +1532,7 @@ elif module == "Module 6: Guardrails & Monitoring":
             use_container_width=True,
             hide_index=True,
         )
+        
         # ----------------------------------------------------
         # COMPARATIVE MONITORING DASHBOARD
         # ----------------------------------------------------
