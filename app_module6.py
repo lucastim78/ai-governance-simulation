@@ -1383,7 +1383,105 @@ elif module == "Module 6: Guardrails & Monitoring":
                 demographic_comparison.round(2),
                 use_container_width=True,
             )
+        # ----------------------------------------------------
+        # CLASSROOM DATA VALIDATION RULES
+        # ----------------------------------------------------
 
+        st.markdown("### Data Validation Assessment")
+
+        st.caption(
+            "These validation rules are assumptions for this "
+            "educational simulation. They are not regulatory "
+            "requirements or established lending standards."
+        )
+
+        validation_rules = {
+            "age": (18, 100),
+            "annual_income": (0, None),
+            "credit_score": (300, 850),
+            "loan_amount": (0, None),
+            "debt_to_income": (0, 1),
+            "employment_years": (0, 80),
+        }
+
+        validation_results = []
+
+        for column, (minimum, maximum) in validation_rules.items():
+
+            if column not in current_df.columns:
+                continue
+
+            values = pd.to_numeric(
+                current_df[column],
+                errors="coerce",
+            )
+
+            invalid = values.notna() & (values < minimum)
+
+            if maximum is not None:
+                invalid = invalid | (
+                    values.notna() & (values > maximum)
+                )
+
+            validation_results.append({
+                "Field": column,
+                "Invalid Records": int(invalid.sum()),
+                "Invalid Rate (%)": round(
+                    100 * invalid.mean(), 2
+                ) if len(invalid) else 0,
+            })
+
+        st.dataframe(
+            pd.DataFrame(validation_results),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        # Count records with at least one invalid field.
+        invalid_record_mask = pd.Series(
+            False,
+            index=current_df.index,
+        )
+
+        for column, (minimum, maximum) in validation_rules.items():
+
+            if column not in current_df.columns:
+                continue
+
+            values = pd.to_numeric(
+                current_df[column],
+                errors="coerce",
+            )
+
+            invalid = values.notna() & (values < minimum)
+
+            if maximum is not None:
+                invalid = invalid | (
+                    values.notna() & (values > maximum)
+                )
+
+            invalid_record_mask = invalid_record_mask | invalid
+
+        invalid_rate = (
+            invalid_record_mask.mean()
+            if len(current_df) else 0
+        )
+
+        invalid_threshold = 0.02
+
+        if invalid_rate > invalid_threshold:
+            st.error(
+                f"M002 ALERT: Invalid record rate is "
+                f"{invalid_rate:.2%}, exceeding the "
+                f"2% monitoring threshold."
+            )
+        else:
+            st.success(
+                f"M002: Invalid record rate is "
+                f"{invalid_rate:.2%}, within the "
+                f"2% monitoring threshold."
+            )
+            
         st.markdown("### Data Quality Indicators")
 
         quality_rows = []
