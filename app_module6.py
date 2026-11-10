@@ -1287,23 +1287,25 @@ elif module == "Module 6: Guardrails & Monitoring":
             key="m6_scenario",
         )
 
+
         scenario_df = monitoring_scenarios[selected_scenario]
 
         # Retrieve model performance for the selected scenario
-scenario_performance = monitoring_model_performance.loc[
-    monitoring_model_performance["scenario"] == selected_scenario
-]
+        scenario_performance = monitoring_model_performance.loc[
+            monitoring_model_performance["scenario"] == selected_scenario
+        ]
 
-if scenario_performance.empty:
-    st.error(
-        f"No model performance results found for {selected_scenario}"
-    )
-    st.stop()
+        if scenario_performance.empty:
+            st.error(
+                f"No model performance results found for {selected_scenario}"
+            )
+            st.stop()
 
-scenario_auc = float(scenario_performance.iloc[0]["auc"])
+        scenario_auc = float(scenario_performance.iloc[0]["auc"])
 
-# Evaluate M004 against the minimum AUC threshold
-m004_status = "ALERT" if scenario_auc < 0.75 else "PASS"
+        # Evaluate M004 against the minimum AUC threshold
+        m004_status = "ALERT" if scenario_auc < 0.75 else "PASS"
+
 
         # ----------------------------------------------------
         # CONSOLIDATED MONITORING GUARDRAIL SUMMARY
