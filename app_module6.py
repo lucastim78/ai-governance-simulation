@@ -2385,7 +2385,112 @@ elif module == "Module 6: Guardrails & Monitoring":
             add_text(
                 f"Date: {datetime.now().strftime('%B %d, %Y')}"
             )
+            
+            # ------------------------------------------------
+            # MONITORING GUARDRAIL EVIDENCE
+            # ------------------------------------------------
 
+            add_heading("Monitoring Guardrail Summary")
+
+            add_text(
+                "The following results were calculated "
+                "from the selected monitoring scenario "
+                "using the simulation's monitoring rules."
+            )
+
+            from reportlab.platypus import (
+                Table as PDFTable,
+                TableStyle as PDFTableStyle,
+            )
+            from reportlab.lib import colors as pdf_colors
+
+            evidence_rows = [
+                ["Policy", "Observed", "Threshold", "Status"]
+            ]
+
+            for _, evidence in guardrail_summary.iterrows():
+                evidence_rows.append([
+                    str(evidence["Policy"]),
+                    str(evidence["Observed"]),
+                    str(evidence["Threshold"]),
+                    str(evidence["Status"]),
+                ])
+
+            evidence_table = PDFTable(
+                evidence_rows,
+                colWidths=[155, 75, 90, 105],
+                repeatRows=1,
+                hAlign="LEFT",
+            )
+
+            evidence_table.setStyle(
+                PDFTableStyle([
+                    (
+                        "BACKGROUND",
+                        (0, 0),
+                        (-1, 0),
+                        pdf_colors.lightgrey,
+                    ),
+                    (
+                        "GRID",
+                        (0, 0),
+                        (-1, -1),
+                        0.4,
+                        pdf_colors.grey,
+                    ),
+                    (
+                        "VALIGN",
+                        (0, 0),
+                        (-1, -1),
+                        "TOP",
+                    ),
+                    (
+                        "FONTSIZE",
+                        (0, 0),
+                        (-1, -1),
+                        8,
+                    ),
+                    (
+                        "LEFTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        6,
+                    ),
+                    (
+                        "RIGHTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        6,
+                    ),
+                    (
+                        "TOPPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        6,
+                    ),
+                    (
+                        "BOTTOMPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        6,
+                    ),
+                ])
+            )
+
+            story.append(evidence_table)
+            story.append(Spacer(1, 14))
+
+            add_text(
+                "M001 evaluates missing applicant data; "
+                "M002 evaluates invalid applicant records "
+                "using classroom validation assumptions; "
+                "M003 reports the maximum evaluated PSI; "
+                "M004 requires prediction scores and is "
+                "not evaluated with the current data. "
+                "An alert does not automatically require "
+                "suspending model operations."
+            )
+            
             fields = [
                 ("Monitoring Scenario", "m6_scenario"),
                 ("Monitoring Findings", "m6_monitoring_findings"),
