@@ -1481,7 +1481,76 @@ elif module == "Module 6: Guardrails & Monitoring":
                 f"{invalid_rate:.2%}, within the "
                 f"2% monitoring threshold."
             )
-            
+                    # ----------------------------------------------------
+        # M001: MISSING DATA GUARDRAIL
+        # ----------------------------------------------------
+
+        st.markdown("### Missing Data Guardrail (M001)")
+
+        # Evaluate missingness across the required applicant
+        # fields, excluding identifiers and target outcomes.
+        required_fields = [
+            "age",
+            "annual_income",
+            "credit_score",
+            "loan_amount",
+            "debt_to_income",
+            "employment_years",
+            "demographic_group",
+        ]
+
+        available_fields = [
+            col for col in required_fields
+            if col in current_df.columns
+        ]
+
+        missing_threshold = 0.05
+
+        if not available_fields or current_df.empty:
+            st.warning(
+                "M001: Insufficient data to evaluate missingness."
+            )
+        else:
+            evaluated_df = current_df[available_fields]
+
+            missing_rate = (
+                evaluated_df.isna().sum().sum()
+                / evaluated_df.size
+            )
+
+            missing_summary = pd.DataFrame({
+                "Field": available_fields,
+                "Missing Values": [
+                    int(evaluated_df[col].isna().sum())
+                    for col in available_fields
+                ],
+                "Missing Rate (%)": [
+                    round(
+                        100 * evaluated_df[col].isna().mean(), 2
+                    )
+                    for col in available_fields
+                ],
+            })
+
+            st.dataframe(
+                missing_summary,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            if missing_rate > missing_threshold:
+                st.error(
+                    f"M001 ALERT: Missing data rate is "
+                    f"{missing_rate:.2%}, exceeding the "
+                    f"5% monitoring threshold."
+                )
+            else:
+                st.success(
+                    f"M001: Missing data rate is "
+                    f"{missing_rate:.2%}, within the "
+                    f"5% monitoring threshold."
+                )
+                
         st.markdown("### Data Quality Indicators")
 
         quality_rows = []
