@@ -1209,6 +1209,10 @@ elif module == "Module 6: Guardrails & Monitoring":
         monitoring_policies = load_table("monitoring_policies")
         monitoring_audit = load_table("monitoring_audit_log")
 
+        monitoring_model_performance = load_table(
+            "monitoring_model_performance"
+        )
+
         monitoring_scenarios = {
             "Normal Operations": load_table("scenario_normal"),
             "Data Quality Issue": load_table("scenario_data_quality"),
