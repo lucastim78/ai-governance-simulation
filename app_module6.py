@@ -2161,6 +2161,61 @@ elif module == "Module 6: Guardrails & Monitoring":
 
         st.subheader("Decide & Escalate")
 
+        # ----------------------------------------------------
+        # GOVERNANCE DECISION SUPPORT
+        # ----------------------------------------------------
+
+        st.markdown("### Monitoring Evidence for Your Decision")
+
+        st.caption(
+            "Review the monitoring results before selecting "
+            "an operational response. A triggered guardrail "
+            "requires evaluation but does not automatically "
+            "determine the appropriate action."
+        )
+
+        st.write(
+            "**Selected scenario:**",
+            st.session_state["m6_scenario"],
+        )
+
+        st.dataframe(
+            guardrail_summary,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        triggered = guardrail_summary[
+            guardrail_summary["Status"] == "ALERT"
+        ]
+
+        unevaluated = guardrail_summary[
+            guardrail_summary["Status"] == "Not Evaluated"
+        ]
+
+        if not triggered.empty:
+            st.warning(
+                f"{len(triggered)} guardrail(s) exceeded "
+                "their monitoring thresholds. Consider "
+                "the severity, potential consequences, "
+                "and appropriate safeguards."
+            )
+        else:
+            st.info(
+                "No evaluated guardrails exceeded their "
+                "thresholds in this scenario."
+            )
+
+        if not unevaluated.empty:
+            st.info(
+                f"{len(unevaluated)} guardrail(s) could not "
+                "be evaluated with the available evidence. "
+                "Consider whether additional investigation "
+                "is necessary."
+            )
+
+        st.markdown("---")
+
         st.markdown(
             """
             As a member of the AI Governance Committee,
