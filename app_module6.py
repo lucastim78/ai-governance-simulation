@@ -65,6 +65,7 @@ def load_table(table_name):
         "governance_policies",
         "model_feature_importance",
         "model_fairness",
+        "monitoring_model_performance",
         "monitoring_policies",
         "monitoring_audit_log",
         "scenario_normal",
