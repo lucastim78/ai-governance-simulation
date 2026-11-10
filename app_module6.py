@@ -1170,15 +1170,628 @@ elif module == "Module 5: Performance & Explainability":
 
 
 # ============================================================
-# MODULE 6 PLACEHOLDER
+# MODULE 6: MONITORING AND GUARDRAILS
 # ============================================================
 
 elif module == "Module 6: Guardrails & Monitoring":
 
-    st.header("Module 6: Guardrails & Monitoring")
+    st.header("Module 6: Model Monitoring & Guardrails")
+
+    st.markdown(
+        """
+        **Your role:** You are a member of the AI Governance
+        Committee responsible for overseeing a deployed
+        lending model.
+
+        Your task is to investigate monitoring alerts,
+        evaluate governance guardrails, and recommend
+        an appropriate operational response.
+        """
+    )
 
     st.info(
-        "Coming next: Production monitoring dashboards, "
-        "data drift detection, simulated incidents, "
-        "and governance response recommendations."
+        "This simulation uses synthetic lending data and "
+        "precomputed monitoring scenarios. Your decisions "
+        "do not affect a real AI system."
     )
+
+    # --------------------------------------------------------
+    # LOAD MONITORING DATA
+    # --------------------------------------------------------
+
+    try:
+        monitoring_policies = load_table("monitoring_policies")
+        monitoring_audit = load_table("monitoring_audit_log")
+
+        monitoring_scenarios = {
+            "Normal Operations": load_table("scenario_normal"),
+            "Data Quality Issue": load_table("scenario_data_quality"),
+            "Data Drift": load_table("scenario_data_drift"),
+            "Performance Deterioration": load_table(
+                "scenario_performance"
+            ),
+        }
+
+    except Exception as e:
+        st.error(f"Unable to load monitoring data: {e}")
+        st.stop()
+
+    st.success("Monitoring evidence loaded successfully.")
+
+    # --------------------------------------------------------
+    # MODULE 6 NAVIGATION
+    # --------------------------------------------------------
+
+    (
+        tab_alerts,
+        tab_guardrails,
+        tab_response,
+        tab_submit,
+    ) = st.tabs(
+        [
+            "1. Investigate Alerts",
+            "2. Evaluate Guardrails",
+            "3. Decide & Escalate",
+            "4. Submit Incident Assessment",
+        ]
+    )
+
+    # --------------------------------------------------------
+    # STUDENT SESSION STATE
+    # --------------------------------------------------------
+
+    if "m6_scenario" not in st.session_state:
+        st.session_state["m6_scenario"] = "Normal Operations"
+
+    if "m6_risk_rating" not in st.session_state:
+        st.session_state["m6_risk_rating"] = "Moderate"
+
+    if "m6_response" not in st.session_state:
+        st.session_state["m6_response"] = "Investigate Further"
+
+    # --------------------------------------------------------
+    # TAB 1: INVESTIGATE MONITORING ALERTS
+    # --------------------------------------------------------
+
+    with tab_alerts:
+
+        st.subheader("Investigate Monitoring Alerts")
+
+        st.markdown(
+            """
+            Review the monitoring scenarios below.
+
+            Select one scenario for your formal governance
+            assessment. Examine the evidence and consider
+            whether the model is operating within acceptable
+            risk limits.
+            """
+        )
+
+        scenario_names = list(monitoring_scenarios.keys())
+
+        selected_scenario = st.selectbox(
+            "Select a monitoring scenario",
+            scenario_names,
+            key="m6_scenario",
+        )
+
+        scenario_df = monitoring_scenarios[selected_scenario]
+
+        st.markdown("### Scenario Evidence")
+
+        st.dataframe(
+            scenario_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        st.caption(
+            "The evidence shown above was generated from "
+            "synthetic monitoring scenarios. It does not "
+            "represent live production data."
+        )
+
+        st.markdown("### Monitoring Investigation")
+
+        st.markdown(
+            """
+            As a governance committee member, consider:
+
+            - What has changed compared with normal operations?
+            - Which monitoring signals deserve attention?
+            - Could the issue affect model reliability or fairness?
+            - What additional information would help you
+              determine the severity of the situation?
+            """
+        )
+
+        st.text_area(
+            "What are the most important monitoring findings?",
+            key="m6_monitoring_findings",
+            height=120,
+            placeholder=(
+                "Summarize the monitoring evidence and "
+                "explain why it matters."
+            ),
+        )
+
+        st.text_area(
+            "What additional evidence would you request?",
+            key="m6_additional_evidence",
+            height=100,
+            placeholder=(
+                "Identify information needed to understand "
+                "the potential impact of this scenario."
+            ),
+        )
+
+        st.markdown(
+            """
+            **Next:** Open the **Evaluate Guardrails** tab to
+            compare your findings with the organization's
+            monitoring policies.
+            """
+        )
+
+    # --------------------------------------------------------
+    # TAB 2: EVALUATE GOVERNANCE GUARDRAILS
+    # --------------------------------------------------------
+
+    with tab_guardrails:
+
+        st.subheader("Evaluate Governance Guardrails")
+
+        st.markdown(
+            """
+            Monitoring guardrails establish the conditions
+            under which an AI model can continue operating,
+            requires investigation, or must be escalated.
+
+            Review the organization's monitoring policies
+            and compare them with the evidence from your
+            selected scenario.
+            """
+        )
+
+        # ----------------------------------------------------
+        # MONITORING POLICIES
+        # ----------------------------------------------------
+
+        st.markdown("### Organizational Monitoring Policies")
+
+        st.dataframe(
+            monitoring_policies,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        st.caption(
+            "These policies were established as part of the "
+            "organization's simulated AI governance framework."
+        )
+
+        # ----------------------------------------------------
+        # HISTORICAL MONITORING AUDIT LOG
+        # ----------------------------------------------------
+
+        st.markdown("### Monitoring Audit History")
+
+        st.markdown(
+            """
+            The audit log provides a record of monitoring
+            observations and governance actions.
+
+            Review the history to understand how monitoring
+            findings have been documented and escalated.
+            """
+        )
+
+        st.dataframe(
+            monitoring_audit,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        # ----------------------------------------------------
+        # POLICY ASSESSMENT
+        # ----------------------------------------------------
+
+        st.markdown("### Your Guardrail Assessment")
+
+        st.markdown(
+            f"**Selected scenario:** "
+            f"{st.session_state['m6_scenario']}"
+        )
+
+        st.multiselect(
+            "Which monitoring areas require governance attention?",
+            [
+                "Data Quality",
+                "Data Drift",
+                "Model Performance",
+                "Model Fairness",
+                "Operational Reliability",
+                "Additional Investigation Needed",
+            ],
+            key="m6_guardrail_concerns",
+        )
+
+        st.radio(
+            "How would you characterize the monitoring evidence?",
+            [
+                "Within Established Guardrails",
+                "Potential Policy Violation",
+                "Confirmed Policy Violation",
+                "Insufficient Evidence",
+            ],
+            key="m6_policy_assessment",
+        )
+
+        st.text_area(
+            "Explain your assessment of the monitoring policies.",
+            key="m6_guardrail_rationale",
+            height=130,
+            placeholder=(
+                "Identify the relevant monitoring policies, "
+                "explain how the scenario evidence relates to "
+                "those policies, and discuss any uncertainty."
+            ),
+        )
+
+        st.markdown(
+            """
+            **Next:** Open the **Decide & Escalate** tab to
+            recommend an operational response and safeguards.
+            """
+        )
+
+    # --------------------------------------------------------
+    # TAB 3: DECIDE AND ESCALATE
+    # --------------------------------------------------------
+
+    with tab_response:
+
+        st.subheader("Decide & Escalate")
+
+        st.markdown(
+            """
+            As a member of the AI Governance Committee,
+            recommend an appropriate operational response
+            to the monitoring scenario you investigated.
+
+            Consider the severity of the issue, the
+            available evidence, and the potential impact
+            on borrowers and the organization.
+            """
+        )
+
+        st.markdown(
+            f"**Selected scenario:** "
+            f"{st.session_state['m6_scenario']}"
+        )
+
+        # ----------------------------------------------------
+        # OPERATIONAL RESPONSE
+        # ----------------------------------------------------
+
+        st.markdown("### Operational Response")
+
+        st.radio(
+            "What action should the organization take?",
+            [
+                "Continue Operations",
+                "Investigate Further",
+                "Continue with Additional Controls",
+                "Temporarily Suspend Model",
+            ],
+            key="m6_response",
+        )
+
+        st.text_area(
+            "Explain your recommended operational response.",
+            key="m6_response_rationale",
+            height=120,
+            placeholder=(
+                "Explain why your selected response is "
+                "appropriate based on the monitoring evidence."
+            ),
+        )
+
+        # ----------------------------------------------------
+        # RISK MITIGATION
+        # ----------------------------------------------------
+
+        st.markdown("### Risk Mitigation and Safeguards")
+
+        st.multiselect(
+            "Which safeguards or corrective actions would you recommend?",
+            [
+                "Investigate Data Quality",
+                "Conduct Data Drift Analysis",
+                "Reevaluate Model Performance",
+                "Conduct Additional Fairness Testing",
+                "Increase Monitoring Frequency",
+                "Require Human Review",
+                "Restrict Automated Decisions",
+                "Initiate Model Retraining Review",
+                "Escalate to Risk and Compliance Teams",
+                "Document and Audit the Incident",
+            ],
+            key="m6_safeguards",
+        )
+
+        st.text_area(
+            "How would these safeguards address the identified risks?",
+            key="m6_safeguard_rationale",
+            height=120,
+            placeholder=(
+                "Connect your proposed safeguards to "
+                "specific monitoring findings."
+            ),
+        )
+
+        # ----------------------------------------------------
+        # OPERATIONAL RISK RATING
+        # ----------------------------------------------------
+
+        st.markdown("### Operational Risk Rating")
+
+        st.radio(
+            "Assign an overall risk rating.",
+            [
+                "Low",
+                "Moderate",
+                "High",
+            ],
+            key="m6_risk_rating",
+        )
+
+        st.text_area(
+            "Explain your risk rating.",
+            key="m6_risk_rationale",
+            height=100,
+            placeholder=(
+                "Consider potential harm, severity, "
+                "uncertainty, and existing controls."
+            ),
+        )
+
+        # ----------------------------------------------------
+        # ESCALATION RESPONSIBILITIES
+        # ----------------------------------------------------
+
+        st.markdown("### Escalation and Accountability")
+
+        st.multiselect(
+            "Who should be notified or involved?",
+            [
+                "Model Owner",
+                "Data Science Team",
+                "Model Risk Management",
+                "Compliance and Legal",
+                "Business Operations",
+                "Executive Risk Committee",
+                "Internal Audit",
+            ],
+            key="m6_escalation",
+        )
+
+        st.text_area(
+            "Describe the responsibilities of the selected stakeholders.",
+            key="m6_escalation_rationale",
+            height=110,
+            placeholder=(
+                "Explain who should investigate, "
+                "approve corrective actions, and "
+                "authorize resumption if needed."
+            ),
+        )
+
+        # ----------------------------------------------------
+        # RECOVERY CRITERIA
+        # ----------------------------------------------------
+
+        st.markdown("### Recovery and Return to Normal Operations")
+
+        st.text_area(
+            "What conditions must be met before normal operations can resume?",
+            key="m6_recovery",
+            height=130,
+            placeholder=(
+                "Identify the evidence, validation, "
+                "approvals, and monitoring conditions "
+                "required to close the incident."
+            ),
+        )
+
+        st.markdown(
+            """
+            **Next:** Open **Submit Incident Assessment**
+            to document and download your governance decision.
+            """
+        )
+
+    # --------------------------------------------------------
+    # TAB 4: SUBMIT INCIDENT ASSESSMENT
+    # --------------------------------------------------------
+
+    with tab_submit:
+
+        st.subheader("Submit Incident Assessment")
+
+        st.markdown(
+            """
+            Review your findings and recommendations before
+            generating your Module 6 assessment.
+
+            Your report will document the monitoring evidence,
+            governance policy assessment, operational response,
+            safeguards, escalation responsibilities, and
+            recovery criteria.
+            """
+        )
+
+        student_name = st.text_input(
+            "Student Name",
+            key="m6_student_name",
+        )
+
+        st.markdown("### Assessment Summary")
+
+        st.write(
+            "**Scenario:**",
+            st.session_state.get("m6_scenario", ""),
+        )
+
+        st.write(
+            "**Policy Assessment:**",
+            st.session_state.get("m6_policy_assessment", ""),
+        )
+
+        st.write(
+            "**Operational Response:**",
+            st.session_state.get("m6_response", ""),
+        )
+
+        st.write(
+            "**Risk Rating:**",
+            st.session_state.get("m6_risk_rating", ""),
+        )
+
+        st.markdown("### Final Governance Rationale")
+
+        st.text_area(
+            "Summarize your overall governance recommendation.",
+            key="m6_final_rationale",
+            height=150,
+            placeholder=(
+                "Explain how the monitoring evidence, "
+                "organizational guardrails, and potential "
+                "risks support your final recommendation."
+            ),
+        )
+
+        def report_text(value):
+            if isinstance(value, (list, tuple, set)):
+                return ", ".join(str(item) for item in value)
+            return str(value or "Not provided")
+
+        def generate_module6_pdf():
+            buffer = BytesIO()
+
+            doc = SimpleDocTemplate(
+                buffer,
+                pagesize=(8.5 * inch, 11 * inch),
+                rightMargin=48,
+                leftMargin=48,
+                topMargin=48,
+                bottomMargin=48,
+            )
+
+            styles = getSampleStyleSheet()
+            story = []
+
+            def add_heading(value):
+                story.append(
+                    Paragraph(
+                        escape(str(value)),
+                        styles["Heading2"],
+                    )
+                )
+
+            def add_text(value):
+                safe = escape(report_text(value)).replace(
+                    "\n", "<br/>"
+                )
+                story.append(
+                    Paragraph(safe, styles["BodyText"])
+                )
+                story.append(Spacer(1, 8))
+
+            story.append(
+                Paragraph(
+                    "Module 6: Monitoring and Guardrails",
+                    styles["Title"],
+                )
+            )
+
+            add_text("AI Governance Committee Incident Assessment")
+            add_text(f"Student: {student_name}")
+            add_text(
+                f"Date: {datetime.now().strftime('%B %d, %Y')}"
+            )
+
+            fields = [
+                ("Monitoring Scenario", "m6_scenario"),
+                ("Monitoring Findings", "m6_monitoring_findings"),
+                ("Additional Evidence Requested", "m6_additional_evidence"),
+                ("Guardrail Concerns", "m6_guardrail_concerns"),
+                ("Policy Assessment", "m6_policy_assessment"),
+                ("Policy Rationale", "m6_guardrail_rationale"),
+                ("Operational Response", "m6_response"),
+                ("Response Rationale", "m6_response_rationale"),
+                ("Recommended Safeguards", "m6_safeguards"),
+                ("Safeguard Rationale", "m6_safeguard_rationale"),
+                ("Operational Risk Rating", "m6_risk_rating"),
+                ("Risk Rationale", "m6_risk_rationale"),
+                ("Escalation Stakeholders", "m6_escalation"),
+                ("Escalation Responsibilities", "m6_escalation_rationale"),
+                ("Recovery Criteria", "m6_recovery"),
+                ("Final Governance Rationale", "m6_final_rationale"),
+            ]
+
+            for label, key in fields:
+                add_heading(label)
+                add_text(st.session_state.get(key, ""))
+
+            add_text(
+                "Educational simulation using synthetic lending data. "
+                "This assessment does not authorize deployment."
+            )
+
+            doc.build(story)
+            result = buffer.getvalue()
+            buffer.close()
+            return result
+
+        required_fields = [
+            "m6_monitoring_findings",
+            "m6_guardrail_rationale",
+            "m6_response_rationale",
+            "m6_safeguard_rationale",
+            "m6_risk_rationale",
+            "m6_recovery",
+            "m6_final_rationale",
+        ]
+
+        missing_fields = [
+            field for field in required_fields
+            if not str(st.session_state.get(field, "")).strip()
+        ]
+
+        if not student_name.strip():
+            st.warning("Enter your name before downloading.")
+
+        elif missing_fields:
+            st.warning(
+                "Complete all required written assessments "
+                "before downloading your report."
+            )
+
+        else:
+            pdf_bytes = generate_module6_pdf()
+
+            st.download_button(
+                "Download Module 6 Incident Assessment PDF",
+                data=pdf_bytes,
+                file_name="Module_6_Incident_Assessment.pdf",
+                mime="application/pdf",
+                key="m6_pdf_download",
+            )
+
+        st.info(
+            "Download your completed PDF before closing the "
+            "application. Submit the PDF through Canvas."
+        )
+
