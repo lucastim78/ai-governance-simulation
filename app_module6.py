@@ -65,6 +65,12 @@ def load_table(table_name):
         "governance_policies",
         "model_feature_importance",
         "model_fairness",
+        "monitoring_policies",
+        "monitoring_audit_log",
+        "scenario_normal",
+        "scenario_data_quality",
+        "scenario_data_drift",
+        "scenario_performance",
     }
 
     if table_name not in allowed_tables:
