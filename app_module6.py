@@ -1509,12 +1509,12 @@ m004_status = "ALERT" if scenario_auc < 0.75 else "PASS"
                     max_psi_value, 0.20
                 ),
             },
-            {
-                "Policy": "M004 - Model AUC",
-                "Observed": f"{scenario_auc:.4f}",
-                "Threshold": "0.75 minimum",
-                "Status": m004_status,
-            },
+{
+    "Policy": "M004 - Model AUC",
+    "Observed": f"{scenario_auc:.4f}",
+    "Threshold": "0.75 minimum",
+    "Status": m004_status,
+},
         ])
 
         st.dataframe(
