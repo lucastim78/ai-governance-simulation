@@ -1550,7 +1550,140 @@ elif module == "Module 6: Guardrails & Monitoring":
                     f"{missing_rate:.2%}, within the "
                     f"5% monitoring threshold."
                 )
-                
+         # ----------------------------------------------------
+        # M003: POPULATION STABILITY INDEX (PSI)
+        # ----------------------------------------------------
+
+        st.markdown("### Population Stability Index (M003)")
+
+        st.caption(
+            "PSI compares the distribution of each applicant "
+            "feature with the Normal Operations reference data. "
+            "A PSI above 0.20 triggers the simulation's "
+            "monitoring guardrail."
+        )
+
+        import numpy as np
+
+        def calculate_psi(reference, observed, bins=10):
+
+            reference = pd.to_numeric(
+                reference, errors="coerce"
+            ).dropna()
+
+            observed = pd.to_numeric(
+                observed, errors="coerce"
+            ).dropna()
+
+            if len(reference) < 2 or len(observed) < 2:
+                return None
+
+            # Use reference quantiles to define bins.
+            edges = np.unique(
+                np.quantile(
+                    reference,
+                    np.linspace(0, 1, bins + 1),
+                )
+            )
+
+            if len(edges) < 2:
+                return None
+
+            # Include observations outside reference range.
+            edges[0] = -np.inf
+            edges[-1] = np.inf
+
+            ref_counts, _ = np.histogram(
+                reference, bins=edges
+            )
+
+            obs_counts, _ = np.histogram(
+                observed, bins=edges
+            )
+
+            # Smooth empty bins to avoid log(0).
+            epsilon = 0.0001
+
+            ref_pct = np.maximum(
+                ref_counts / ref_counts.sum(), epsilon
+            )
+
+            obs_pct = np.maximum(
+                obs_counts / obs_counts.sum(), epsilon
+            )
+
+            psi = np.sum(
+                (obs_pct - ref_pct)
+                * np.log(obs_pct / ref_pct)
+            )
+
+            return float(psi)
+
+        psi_features = [
+            "credit_score",
+            "annual_income",
+            "debt_to_income",
+            "loan_amount",
+            "employment_years",
+        ]
+
+        psi_results = []
+
+        for feature in psi_features:
+
+            if (
+                feature not in baseline_df.columns
+                or feature not in current_df.columns
+            ):
+                continue
+
+            psi_value = calculate_psi(
+                baseline_df[feature],
+                current_df[feature],
+            )
+
+            if psi_value is not None:
+                psi_results.append({
+                    "Feature": feature,
+                    "PSI": round(psi_value, 4),
+                    "Threshold": 0.20,
+                    "Status": (
+                        "ALERT"
+                        if psi_value > 0.20
+                        else "Within Threshold"
+                    ),
+                })
+
+        if psi_results:
+
+            psi_df = pd.DataFrame(psi_results)
+
+            st.dataframe(
+                psi_df,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            alert_features = psi_df[
+                psi_df["Status"] == "ALERT"
+            ]
+
+            if not alert_features.empty:
+                st.error(
+                    "M003 ALERT: One or more applicant "
+                    "features exceed the PSI threshold of 0.20."
+                )
+            else:
+                st.success(
+                    "M003: All evaluated features are "
+                    "within the PSI threshold of 0.20."
+                )
+
+        else:
+            st.warning(
+                "M003: Insufficient data to calculate PSI."
+            )
+            
         st.markdown("### Data Quality Indicators")
 
         quality_rows = []
