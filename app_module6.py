@@ -2005,7 +2005,50 @@ elif module == "Module 6: Guardrails & Monitoring":
     with tab_guardrails:
 
         st.subheader("Evaluate Governance Guardrails")
+        # ----------------------------------------------------
+        # CURRENT MONITORING RESULTS
+        # ----------------------------------------------------
 
+        st.markdown("### Current Monitoring Guardrail Results")
+
+        st.caption(
+            "These results are calculated from the selected "
+            "monitoring scenario. Compare them with the "
+            "organization's monitoring policies before "
+            "making your governance assessment."
+        )
+
+        st.write(
+            "**Selected scenario:**",
+            st.session_state["m6_scenario"],
+        )
+
+        st.dataframe(
+            guardrail_summary,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        triggered_guardrails = guardrail_summary[
+            guardrail_summary["Status"] == "ALERT"
+        ]
+
+        if not triggered_guardrails.empty:
+            st.warning(
+                f"{len(triggered_guardrails)} monitoring "
+                "guardrail(s) exceeded their thresholds. "
+                "Review the evidence and determine the "
+                "appropriate governance response."
+            )
+        else:
+            st.info(
+                "No evaluated guardrails exceeded their "
+                "thresholds. Some metrics may still require "
+                "additional evidence."
+            )
+
+        st.markdown("---")
+        
         st.markdown(
             """
             Monitoring guardrails establish the conditions
