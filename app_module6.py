@@ -1291,7 +1291,123 @@ elif module == "Module 6: Guardrails & Monitoring":
             use_container_width=True,
             hide_index=True,
         )
+        # ----------------------------------------------------
+        # COMPARATIVE MONITORING DASHBOARD
+        # ----------------------------------------------------
 
+        st.markdown("### Monitoring Evidence Dashboard")
+
+        st.caption(
+            "Compare the selected scenario against the "
+            "Normal Operations reference dataset. "
+            "Differences are descriptive indicators, "
+            "not automatically policy violations."
+        )
+
+        baseline_df = monitoring_scenarios["Normal Operations"]
+        current_df = monitoring_scenarios[
+            st.session_state["m6_scenario"]
+        ]
+
+        monitoring_columns = {
+            "credit_score": "Average Credit Score",
+            "annual_income": "Average Annual Income",
+            "debt_to_income": "Average Debt-to-Income Ratio",
+            "loan_amount": "Average Loan Amount",
+            "employment_years": "Average Employment Years",
+        }
+
+        comparison_rows = []
+
+        for column, label in monitoring_columns.items():
+
+            if (
+                column in baseline_df.columns
+                and column in current_df.columns
+            ):
+                baseline_values = pd.to_numeric(
+                    baseline_df[column], errors="coerce"
+                )
+                current_values = pd.to_numeric(
+                    current_df[column], errors="coerce"
+                )
+
+                baseline_mean = baseline_values.mean()
+                current_mean = current_values.mean()
+
+                comparison_rows.append({
+                    "Metric": label,
+                    "Normal Operations": round(baseline_mean, 3),
+                    "Selected Scenario": round(current_mean, 3),
+                    "Change": round(
+                        current_mean - baseline_mean, 3
+                    ),
+                })
+
+        if comparison_rows:
+            st.dataframe(
+                pd.DataFrame(comparison_rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        st.markdown("### Applicant Demographic Distribution")
+
+        if (
+            "demographic_group" in baseline_df.columns
+            and "demographic_group" in current_df.columns
+        ):
+            baseline_dist = (
+                baseline_df["demographic_group"]
+                .value_counts(normalize=True)
+                .mul(100)
+            )
+
+            current_dist = (
+                current_df["demographic_group"]
+                .value_counts(normalize=True)
+                .mul(100)
+            )
+
+            demographic_comparison = pd.DataFrame({
+                "Normal Operations (%)": baseline_dist,
+                "Selected Scenario (%)": current_dist,
+            }).fillna(0)
+
+            demographic_comparison["Change (percentage points)"] = (
+                demographic_comparison["Selected Scenario (%)"]
+                - demographic_comparison["Normal Operations (%)"]
+            )
+
+            st.dataframe(
+                demographic_comparison.round(2),
+                use_container_width=True,
+            )
+
+        st.markdown("### Data Quality Indicators")
+
+        quality_rows = []
+
+        for label, df in [
+            ("Normal Operations", baseline_df),
+            ("Selected Scenario", current_df),
+        ]:
+            quality_rows.append({
+                "Dataset": label,
+                "Observations": len(df),
+                "Missing Values": int(df.isna().sum().sum()),
+                "Duplicate Applicant IDs": (
+                    int(df["applicant_id"].duplicated().sum())
+                    if "applicant_id" in df.columns
+                    else None
+                ),
+            })
+
+        st.dataframe(
+            pd.DataFrame(quality_rows),
+            use_container_width=True,
+            hide_index=True,
+        )
         st.caption(
             "The evidence shown above was generated from "
             "synthetic monitoring scenarios. It does not "
