@@ -65,6 +65,12 @@ def load_table(table_name):
         "governance_policies",
         "model_feature_importance",
         "model_fairness",
+        "monitoring_policies",
+        "monitoring_audit_log",
+        "scenario_normal",
+        "scenario_data_quality",
+        "scenario_data_drift",
+        "scenario_performance",
     }
 
     if table_name not in allowed_tables:
@@ -1170,15 +1176,1488 @@ elif module == "Module 5: Performance & Explainability":
 
 
 # ============================================================
-# MODULE 6 PLACEHOLDER
+# MODULE 6: MONITORING AND GUARDRAILS
 # ============================================================
 
 elif module == "Module 6: Guardrails & Monitoring":
 
-    st.header("Module 6: Guardrails & Monitoring")
+    st.header("Module 6: Model Monitoring & Guardrails")
+
+    st.markdown(
+        """
+        **Your role:** You are a member of the AI Governance
+        Committee responsible for overseeing a deployed
+        lending model.
+
+        Your task is to investigate monitoring alerts,
+        evaluate governance guardrails, and recommend
+        an appropriate operational response.
+        """
+    )
 
     st.info(
-        "Coming next: Production monitoring dashboards, "
-        "data drift detection, simulated incidents, "
-        "and governance response recommendations."
+        "This simulation uses synthetic lending data and "
+        "precomputed monitoring scenarios. Your decisions "
+        "do not affect a real AI system."
     )
+
+    # --------------------------------------------------------
+    # LOAD MONITORING DATA
+    # --------------------------------------------------------
+
+    try:
+        monitoring_policies = load_table("monitoring_policies")
+        monitoring_audit = load_table("monitoring_audit_log")
+
+        monitoring_scenarios = {
+            "Normal Operations": load_table("scenario_normal"),
+            "Data Quality Issue": load_table("scenario_data_quality"),
+            "Data Drift": load_table("scenario_data_drift"),
+            "Performance Deterioration": load_table(
+                "scenario_performance"
+            ),
+        }
+
+    except Exception as e:
+        st.error(f"Unable to load monitoring data: {e}")
+        st.stop()
+
+    st.success("Monitoring evidence loaded successfully.")
+
+    # --------------------------------------------------------
+    # MODULE 6 NAVIGATION
+    # --------------------------------------------------------
+
+    (
+        tab_alerts,
+        tab_guardrails,
+        tab_response,
+        tab_submit,
+    ) = st.tabs(
+        [
+            "1. Investigate Alerts",
+            "2. Evaluate Guardrails",
+            "3. Decide & Escalate",
+            "4. Submit Incident Assessment",
+        ]
+    )
+
+    # --------------------------------------------------------
+    # STUDENT SESSION STATE
+    # --------------------------------------------------------
+
+    if "m6_scenario" not in st.session_state:
+        st.session_state["m6_scenario"] = "Normal Operations"
+
+    if "m6_risk_rating" not in st.session_state:
+        st.session_state["m6_risk_rating"] = "Moderate"
+
+    if "m6_response" not in st.session_state:
+        st.session_state["m6_response"] = "Investigate Further"
+
+    # --------------------------------------------------------
+    # TAB 1: INVESTIGATE MONITORING ALERTS
+    # --------------------------------------------------------
+
+    with tab_alerts:
+
+        st.subheader("Investigate Monitoring Alerts")
+
+        st.markdown(
+            """
+            Review the monitoring scenarios below.
+
+            Select one scenario for your formal governance
+            assessment. Examine the evidence and consider
+            whether the model is operating within acceptable
+            risk limits.
+            """
+        )
+
+        scenario_names = list(monitoring_scenarios.keys())
+
+        selected_scenario = st.selectbox(
+            "Select a monitoring scenario",
+            scenario_names,
+            key="m6_scenario",
+        )
+
+        scenario_df = monitoring_scenarios[selected_scenario]
+        # ----------------------------------------------------
+        # CONSOLIDATED MONITORING GUARDRAIL SUMMARY
+        # ----------------------------------------------------
+
+        st.markdown("### Monitoring Guardrail Summary")
+
+        st.caption(
+            "This dashboard compares the selected scenario "
+            "with established monitoring thresholds. "
+            "Alerts indicate issues requiring governance review, "
+            "not automatic decisions to suspend the model."
+        )
+
+        baseline_summary = monitoring_scenarios["Normal Operations"]
+        current_summary = scenario_df
+
+        # Classroom validation assumptions.
+        summary_rules = {
+            "age": (18, 100),
+            "annual_income": (0, None),
+            "credit_score": (300, 850),
+            "loan_amount": (0, None),
+            "debt_to_income": (0, 1),
+            "employment_years": (0, 80),
+        }
+
+        # M001: Missing data
+        summary_fields = [
+            "age", "annual_income", "credit_score",
+            "loan_amount", "debt_to_income",
+            "employment_years", "demographic_group",
+        ]
+
+        available_summary_fields = [
+            c for c in summary_fields
+            if c in current_summary.columns
+        ]
+
+        missing_value = None
+
+        if available_summary_fields and not current_summary.empty:
+            summary_data = current_summary[available_summary_fields]
+            missing_value = (
+                summary_data.isna().sum().sum()
+                / summary_data.size
+            )
+
+        # M002: Invalid records
+        invalid_value = None
+
+        if not current_summary.empty:
+            invalid_mask = pd.Series(
+                False, index=current_summary.index
+            )
+
+            for field, (minimum, maximum) in summary_rules.items():
+                if field not in current_summary.columns:
+                    continue
+
+                numeric_values = pd.to_numeric(
+                    current_summary[field], errors="coerce"
+                )
+
+                invalid_field = (
+                    numeric_values.notna()
+                    & (numeric_values < minimum)
+                )
+
+                if maximum is not None:
+                    invalid_field = invalid_field | (
+                        numeric_values.notna()
+                        & (numeric_values > maximum)
+                    )
+
+                invalid_mask = invalid_mask | invalid_field
+
+            invalid_value = invalid_mask.mean()
+
+        # M003: Population Stability Index
+        # Calculate PSI locally so this summary can appear
+        # before the detailed evidence dashboard.
+
+        import numpy as np
+
+        def summary_psi(reference, observed, bins=10):
+            reference = pd.to_numeric(
+                reference, errors="coerce"
+            ).dropna()
+
+            observed = pd.to_numeric(
+                observed, errors="coerce"
+            ).dropna()
+
+            if len(reference) < 2 or len(observed) < 2:
+                return None
+
+            edges = np.unique(
+                np.quantile(
+                    reference,
+                    np.linspace(0, 1, bins + 1),
+                )
+            )
+
+            if len(edges) < 2:
+                return None
+
+            edges[0] = -np.inf
+            edges[-1] = np.inf
+
+            ref_counts, _ = np.histogram(
+                reference, bins=edges
+            )
+            obs_counts, _ = np.histogram(
+                observed, bins=edges
+            )
+
+            epsilon = 0.0001
+
+            ref_pct = np.maximum(
+                ref_counts / ref_counts.sum(), epsilon
+            )
+            obs_pct = np.maximum(
+                obs_counts / obs_counts.sum(), epsilon
+            )
+
+            return float(np.sum(
+                (obs_pct - ref_pct)
+                * np.log(obs_pct / ref_pct)
+            ))
+
+        psi_values = []
+
+        for feature in [
+            "credit_score",
+            "annual_income",
+            "debt_to_income",
+            "loan_amount",
+            "employment_years",
+        ]:
+            if (
+                feature in baseline_summary.columns
+                and feature in current_summary.columns
+            ):
+                value = summary_psi(
+                    baseline_summary[feature],
+                    current_summary[feature],
+                )
+                if value is not None:
+                    psi_values.append(value)
+
+        max_psi_value = max(psi_values) if psi_values else None
+
+        def guardrail_status(value, threshold, direction="max"):
+            if value is None:
+                return "Not Evaluated"
+
+            if direction == "max":
+                return (
+                    "ALERT" if value > threshold
+                    else "Within Threshold"
+                )
+
+            return (
+                "ALERT" if value < threshold
+                else "Within Threshold"
+            )
+
+        guardrail_summary = pd.DataFrame([
+            {
+                "Policy": "M001 - Missing Data",
+                "Observed": (
+                    f"{missing_value:.2%}"
+                    if missing_value is not None
+                    else "Unavailable"
+                ),
+                "Threshold": "5% maximum",
+                "Status": guardrail_status(
+                    missing_value, 0.05
+                ),
+            },
+            {
+                "Policy": "M002 - Invalid Data",
+                "Observed": (
+                    f"{invalid_value:.2%}"
+                    if invalid_value is not None
+                    else "Unavailable"
+                ),
+                "Threshold": "2% maximum",
+                "Status": guardrail_status(
+                    invalid_value, 0.02
+                ),
+            },
+            {
+                "Policy": "M003 - Data Drift (Max PSI)",
+                "Observed": (
+                    f"{max_psi_value:.4f}"
+                    if max_psi_value is not None
+                    else "Unavailable"
+                ),
+                "Threshold": "0.20 maximum",
+                "Status": guardrail_status(
+                    max_psi_value, 0.20
+                ),
+            },
+            {
+                "Policy": "M004 - Model AUC",
+                "Observed": "Unavailable",
+                "Threshold": "0.75 minimum",
+                "Status": "Not Evaluated",
+            },
+        ])
+
+        st.dataframe(
+            guardrail_summary,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        alert_count = (
+            guardrail_summary["Status"] == "ALERT"
+        ).sum()
+
+        if alert_count:
+            st.error(
+                f"{alert_count} monitoring guardrail(s) "
+                "exceeded their thresholds."
+            )
+        else:
+            st.info(
+                "No evaluated guardrails exceeded their "
+                "thresholds. Review unevaluated metrics "
+                "before drawing conclusions."
+            )
+
+        st.markdown(
+            """
+            **Governance investigation:** Which alerts require
+            action? What additional evidence would you need?
+            Does the situation warrant continued operation,
+            increased monitoring, or restrictions?
+            """
+        )
+        st.markdown("### Scenario Evidence")
+
+        st.dataframe(
+            scenario_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+        
+        # ----------------------------------------------------
+        # COMPARATIVE MONITORING DASHBOARD
+        # ----------------------------------------------------
+
+        st.markdown("### Monitoring Evidence Dashboard")
+
+        st.caption(
+            "Compare the selected scenario against the "
+            "Normal Operations reference dataset. "
+            "Differences are descriptive indicators, "
+            "not automatically policy violations."
+        )
+
+        baseline_df = monitoring_scenarios["Normal Operations"]
+        current_df = monitoring_scenarios[
+            st.session_state["m6_scenario"]
+        ]
+
+        monitoring_columns = {
+            "credit_score": "Average Credit Score",
+            "annual_income": "Average Annual Income",
+            "debt_to_income": "Average Debt-to-Income Ratio",
+            "loan_amount": "Average Loan Amount",
+            "employment_years": "Average Employment Years",
+        }
+
+        comparison_rows = []
+
+        for column, label in monitoring_columns.items():
+
+            if (
+                column in baseline_df.columns
+                and column in current_df.columns
+            ):
+                baseline_values = pd.to_numeric(
+                    baseline_df[column], errors="coerce"
+                )
+                current_values = pd.to_numeric(
+                    current_df[column], errors="coerce"
+                )
+
+                baseline_mean = baseline_values.mean()
+                current_mean = current_values.mean()
+
+                comparison_rows.append({
+                    "Metric": label,
+                    "Normal Operations": round(baseline_mean, 3),
+                    "Selected Scenario": round(current_mean, 3),
+                    "Change": round(
+                        current_mean - baseline_mean, 3
+                    ),
+                })
+
+        if comparison_rows:
+            st.dataframe(
+                pd.DataFrame(comparison_rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        st.markdown("### Applicant Demographic Distribution")
+
+        if (
+            "demographic_group" in baseline_df.columns
+            and "demographic_group" in current_df.columns
+        ):
+            baseline_dist = (
+                baseline_df["demographic_group"]
+                .value_counts(normalize=True)
+                .mul(100)
+            )
+
+            current_dist = (
+                current_df["demographic_group"]
+                .value_counts(normalize=True)
+                .mul(100)
+            )
+
+            demographic_comparison = pd.DataFrame({
+                "Normal Operations (%)": baseline_dist,
+                "Selected Scenario (%)": current_dist,
+            }).fillna(0)
+
+            demographic_comparison["Change (percentage points)"] = (
+                demographic_comparison["Selected Scenario (%)"]
+                - demographic_comparison["Normal Operations (%)"]
+            )
+
+            st.dataframe(
+                demographic_comparison.round(2),
+                use_container_width=True,
+            )
+        # ----------------------------------------------------
+        # CLASSROOM DATA VALIDATION RULES
+        # ----------------------------------------------------
+
+        st.markdown("### Data Validation Assessment")
+
+        st.caption(
+            "These validation rules are assumptions for this "
+            "educational simulation. They are not regulatory "
+            "requirements or established lending standards."
+        )
+
+        validation_rules = {
+            "age": (18, 100),
+            "annual_income": (0, None),
+            "credit_score": (300, 850),
+            "loan_amount": (0, None),
+            "debt_to_income": (0, 1),
+            "employment_years": (0, 80),
+        }
+
+        validation_results = []
+
+        for column, (minimum, maximum) in validation_rules.items():
+
+            if column not in current_df.columns:
+                continue
+
+            values = pd.to_numeric(
+                current_df[column],
+                errors="coerce",
+            )
+
+            invalid = values.notna() & (values < minimum)
+
+            if maximum is not None:
+                invalid = invalid | (
+                    values.notna() & (values > maximum)
+                )
+
+            validation_results.append({
+                "Field": column,
+                "Invalid Records": int(invalid.sum()),
+                "Invalid Rate (%)": round(
+                    100 * invalid.mean(), 2
+                ) if len(invalid) else 0,
+            })
+
+        st.dataframe(
+            pd.DataFrame(validation_results),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        # Count records with at least one invalid field.
+        invalid_record_mask = pd.Series(
+            False,
+            index=current_df.index,
+        )
+
+        for column, (minimum, maximum) in validation_rules.items():
+
+            if column not in current_df.columns:
+                continue
+
+            values = pd.to_numeric(
+                current_df[column],
+                errors="coerce",
+            )
+
+            invalid = values.notna() & (values < minimum)
+
+            if maximum is not None:
+                invalid = invalid | (
+                    values.notna() & (values > maximum)
+                )
+
+            invalid_record_mask = invalid_record_mask | invalid
+
+        invalid_rate = (
+            invalid_record_mask.mean()
+            if len(current_df) else 0
+        )
+
+        invalid_threshold = 0.02
+
+        if invalid_rate > invalid_threshold:
+            st.error(
+                f"M002 ALERT: Invalid record rate is "
+                f"{invalid_rate:.2%}, exceeding the "
+                f"2% monitoring threshold."
+            )
+        else:
+            st.success(
+                f"M002: Invalid record rate is "
+                f"{invalid_rate:.2%}, within the "
+                f"2% monitoring threshold."
+            )
+                    # ----------------------------------------------------
+        # M001: MISSING DATA GUARDRAIL
+        # ----------------------------------------------------
+
+        st.markdown("### Missing Data Guardrail (M001)")
+
+        # Evaluate missingness across the required applicant
+        # fields, excluding identifiers and target outcomes.
+        required_fields = [
+            "age",
+            "annual_income",
+            "credit_score",
+            "loan_amount",
+            "debt_to_income",
+            "employment_years",
+            "demographic_group",
+        ]
+
+        available_fields = [
+            col for col in required_fields
+            if col in current_df.columns
+        ]
+
+        missing_threshold = 0.05
+
+        if not available_fields or current_df.empty:
+            st.warning(
+                "M001: Insufficient data to evaluate missingness."
+            )
+        else:
+            evaluated_df = current_df[available_fields]
+
+            missing_rate = (
+                evaluated_df.isna().sum().sum()
+                / evaluated_df.size
+            )
+
+            missing_summary = pd.DataFrame({
+                "Field": available_fields,
+                "Missing Values": [
+                    int(evaluated_df[col].isna().sum())
+                    for col in available_fields
+                ],
+                "Missing Rate (%)": [
+                    round(
+                        100 * evaluated_df[col].isna().mean(), 2
+                    )
+                    for col in available_fields
+                ],
+            })
+
+            st.dataframe(
+                missing_summary,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            if missing_rate > missing_threshold:
+                st.error(
+                    f"M001 ALERT: Missing data rate is "
+                    f"{missing_rate:.2%}, exceeding the "
+                    f"5% monitoring threshold."
+                )
+            else:
+                st.success(
+                    f"M001: Missing data rate is "
+                    f"{missing_rate:.2%}, within the "
+                    f"5% monitoring threshold."
+                )
+         # ----------------------------------------------------
+        # M003: POPULATION STABILITY INDEX (PSI)
+        # ----------------------------------------------------
+
+        st.markdown("### Population Stability Index (M003)")
+
+        st.caption(
+            "PSI compares the distribution of each applicant "
+            "feature with the Normal Operations reference data. "
+            "A PSI above 0.20 triggers the simulation's "
+            "monitoring guardrail."
+        )
+
+        import numpy as np
+
+        def calculate_psi(reference, observed, bins=10):
+
+            reference = pd.to_numeric(
+                reference, errors="coerce"
+            ).dropna()
+
+            observed = pd.to_numeric(
+                observed, errors="coerce"
+            ).dropna()
+
+            if len(reference) < 2 or len(observed) < 2:
+                return None
+
+            # Use reference quantiles to define bins.
+            edges = np.unique(
+                np.quantile(
+                    reference,
+                    np.linspace(0, 1, bins + 1),
+                )
+            )
+
+            if len(edges) < 2:
+                return None
+
+            # Include observations outside reference range.
+            edges[0] = -np.inf
+            edges[-1] = np.inf
+
+            ref_counts, _ = np.histogram(
+                reference, bins=edges
+            )
+
+            obs_counts, _ = np.histogram(
+                observed, bins=edges
+            )
+
+            # Smooth empty bins to avoid log(0).
+            epsilon = 0.0001
+
+            ref_pct = np.maximum(
+                ref_counts / ref_counts.sum(), epsilon
+            )
+
+            obs_pct = np.maximum(
+                obs_counts / obs_counts.sum(), epsilon
+            )
+
+            psi = np.sum(
+                (obs_pct - ref_pct)
+                * np.log(obs_pct / ref_pct)
+            )
+
+            return float(psi)
+
+        psi_features = [
+            "credit_score",
+            "annual_income",
+            "debt_to_income",
+            "loan_amount",
+            "employment_years",
+        ]
+
+        psi_results = []
+
+        for feature in psi_features:
+
+            if (
+                feature not in baseline_df.columns
+                or feature not in current_df.columns
+            ):
+                continue
+
+            psi_value = calculate_psi(
+                baseline_df[feature],
+                current_df[feature],
+            )
+
+            if psi_value is not None:
+                psi_results.append({
+                    "Feature": feature,
+                    "PSI": round(psi_value, 4),
+                    "Threshold": 0.20,
+                    "Status": (
+                        "ALERT"
+                        if psi_value > 0.20
+                        else "Within Threshold"
+                    ),
+                })
+
+        if psi_results:
+
+            psi_df = pd.DataFrame(psi_results)
+
+            st.dataframe(
+                psi_df,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            alert_features = psi_df[
+                psi_df["Status"] == "ALERT"
+            ]
+
+            if not alert_features.empty:
+                st.error(
+                    "M003 ALERT: One or more applicant "
+                    "features exceed the PSI threshold of 0.20."
+                )
+            else:
+                st.success(
+                    "M003: All evaluated features are "
+                    "within the PSI threshold of 0.20."
+                )
+
+        else:
+            st.warning(
+                "M003: Insufficient data to calculate PSI."
+            )
+            
+        st.markdown("### Data Quality Indicators")
+
+        quality_rows = []
+
+        for label, df in [
+            ("Normal Operations", baseline_df),
+            ("Selected Scenario", current_df),
+        ]:
+            quality_rows.append({
+                "Dataset": label,
+                "Observations": len(df),
+                "Missing Values": int(df.isna().sum().sum()),
+                "Duplicate Applicant IDs": (
+                    int(df["applicant_id"].duplicated().sum())
+                    if "applicant_id" in df.columns
+                    else None
+                ),
+            })
+
+        st.dataframe(
+            pd.DataFrame(quality_rows),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption(
+            "The evidence shown above was generated from "
+            "synthetic monitoring scenarios. It does not "
+            "represent live production data."
+        )
+
+        st.markdown("### Monitoring Investigation")
+
+        st.markdown(
+            """
+            As a governance committee member, consider:
+
+            - What has changed compared with normal operations?
+            - Which monitoring signals deserve attention?
+            - Could the issue affect model reliability or fairness?
+            - What additional information would help you
+              determine the severity of the situation?
+            """
+        )
+
+        st.text_area(
+            "What are the most important monitoring findings?",
+            key="m6_monitoring_findings",
+            height=120,
+            placeholder=(
+                "Summarize the monitoring evidence and "
+                "explain why it matters."
+            ),
+        )
+
+        st.text_area(
+            "What additional evidence would you request?",
+            key="m6_additional_evidence",
+            height=100,
+            placeholder=(
+                "Identify information needed to understand "
+                "the potential impact of this scenario."
+            ),
+        )
+
+        st.markdown(
+            """
+            **Next:** Open the **Evaluate Guardrails** tab to
+            compare your findings with the organization's
+            monitoring policies.
+            """
+        )
+
+    # --------------------------------------------------------
+    # TAB 2: EVALUATE GOVERNANCE GUARDRAILS
+    # --------------------------------------------------------
+
+    with tab_guardrails:
+
+        st.subheader("Evaluate Governance Guardrails")
+        # ----------------------------------------------------
+        # CURRENT MONITORING RESULTS
+        # ----------------------------------------------------
+
+        st.markdown("### Current Monitoring Guardrail Results")
+
+        st.caption(
+            "These results are calculated from the selected "
+            "monitoring scenario. Compare them with the "
+            "organization's monitoring policies before "
+            "making your governance assessment."
+        )
+
+        st.write(
+            "**Selected scenario:**",
+            st.session_state["m6_scenario"],
+        )
+
+        st.dataframe(
+            guardrail_summary,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        triggered_guardrails = guardrail_summary[
+            guardrail_summary["Status"] == "ALERT"
+        ]
+
+        if not triggered_guardrails.empty:
+            st.warning(
+                f"{len(triggered_guardrails)} monitoring "
+                "guardrail(s) exceeded their thresholds. "
+                "Review the evidence and determine the "
+                "appropriate governance response."
+            )
+        else:
+            st.info(
+                "No evaluated guardrails exceeded their "
+                "thresholds. Some metrics may still require "
+                "additional evidence."
+            )
+
+        st.markdown("---")
+        
+        st.markdown(
+            """
+            Monitoring guardrails establish the conditions
+            under which an AI model can continue operating,
+            requires investigation, or must be escalated.
+
+            Review the organization's monitoring policies
+            and compare them with the evidence from your
+            selected scenario.
+            """
+        )
+
+        # ----------------------------------------------------
+        # MONITORING POLICIES
+        # ----------------------------------------------------
+
+        st.markdown("### Organizational Monitoring Policies")
+
+        st.dataframe(
+            monitoring_policies,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        st.caption(
+            "These policies were established as part of the "
+            "organization's simulated AI governance framework."
+        )
+
+        # ----------------------------------------------------
+        # HISTORICAL MONITORING AUDIT LOG
+        # ----------------------------------------------------
+
+        st.markdown("### Monitoring Audit History")
+
+        st.markdown(
+            """
+            The audit log provides a record of monitoring
+            observations and governance actions.
+
+            Review the history to understand how monitoring
+            findings have been documented and escalated.
+            """
+        )
+
+        st.dataframe(
+            monitoring_audit,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        # ----------------------------------------------------
+        # POLICY ASSESSMENT
+        # ----------------------------------------------------
+
+        st.markdown("### Your Guardrail Assessment")
+
+        st.markdown(
+            f"**Selected scenario:** "
+            f"{st.session_state['m6_scenario']}"
+        )
+
+        st.multiselect(
+            "Which monitoring areas require governance attention?",
+            [
+                "Data Quality",
+                "Data Drift",
+                "Model Performance",
+                "Model Fairness",
+                "Operational Reliability",
+                "Additional Investigation Needed",
+            ],
+            key="m6_guardrail_concerns",
+        )
+
+        st.radio(
+            "How would you characterize the monitoring evidence?",
+            [
+                "Within Established Guardrails",
+                "Potential Policy Violation",
+                "Confirmed Policy Violation",
+                "Insufficient Evidence",
+            ],
+            key="m6_policy_assessment",
+        )
+
+        st.text_area(
+            "Explain your assessment of the monitoring policies.",
+            key="m6_guardrail_rationale",
+            height=130,
+            placeholder=(
+                "Identify the relevant monitoring policies, "
+                "explain how the scenario evidence relates to "
+                "those policies, and discuss any uncertainty."
+            ),
+        )
+
+        st.markdown(
+            """
+            **Next:** Open the **Decide & Escalate** tab to
+            recommend an operational response and safeguards.
+            """
+        )
+
+    # --------------------------------------------------------
+    # TAB 3: DECIDE AND ESCALATE
+    # --------------------------------------------------------
+
+    with tab_response:
+
+        st.subheader("Decide & Escalate")
+
+        # ----------------------------------------------------
+        # GOVERNANCE DECISION SUPPORT
+        # ----------------------------------------------------
+
+        st.markdown("### Monitoring Evidence for Your Decision")
+
+        st.caption(
+            "Review the monitoring results before selecting "
+            "an operational response. A triggered guardrail "
+            "requires evaluation but does not automatically "
+            "determine the appropriate action."
+        )
+
+        st.write(
+            "**Selected scenario:**",
+            st.session_state["m6_scenario"],
+        )
+
+        st.dataframe(
+            guardrail_summary,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        triggered = guardrail_summary[
+            guardrail_summary["Status"] == "ALERT"
+        ]
+
+        unevaluated = guardrail_summary[
+            guardrail_summary["Status"] == "Not Evaluated"
+        ]
+
+        if not triggered.empty:
+            st.warning(
+                f"{len(triggered)} guardrail(s) exceeded "
+                "their monitoring thresholds. Consider "
+                "the severity, potential consequences, "
+                "and appropriate safeguards."
+            )
+        else:
+            st.info(
+                "No evaluated guardrails exceeded their "
+                "thresholds in this scenario."
+            )
+
+        if not unevaluated.empty:
+            st.info(
+                f"{len(unevaluated)} guardrail(s) could not "
+                "be evaluated with the available evidence. "
+                "Consider whether additional investigation "
+                "is necessary."
+            )
+
+        st.markdown("---")
+
+        st.markdown(
+            """
+            As a member of the AI Governance Committee,
+            recommend an appropriate operational response
+            to the monitoring scenario you investigated.
+
+            Consider the severity of the issue, the
+            available evidence, and the potential impact
+            on borrowers and the organization.
+            """
+        )
+
+        st.markdown(
+            f"**Selected scenario:** "
+            f"{st.session_state['m6_scenario']}"
+        )
+
+        # ----------------------------------------------------
+        # OPERATIONAL RESPONSE
+        # ----------------------------------------------------
+
+        st.markdown("### Operational Response")
+
+        st.radio(
+            "What action should the organization take?",
+            [
+                "Continue Operations",
+                "Investigate Further",
+                "Continue with Additional Controls",
+                "Temporarily Suspend Model",
+            ],
+            key="m6_response",
+        )
+
+        st.text_area(
+            "Explain your recommended operational response.",
+            key="m6_response_rationale",
+            height=120,
+            placeholder=(
+                "Explain why your selected response is "
+                "appropriate based on the monitoring evidence."
+            ),
+        )
+
+        # ----------------------------------------------------
+        # RISK MITIGATION
+        # ----------------------------------------------------
+
+        st.markdown("### Risk Mitigation and Safeguards")
+
+        st.multiselect(
+            "Which safeguards or corrective actions would you recommend?",
+            [
+                "Investigate Data Quality",
+                "Conduct Data Drift Analysis",
+                "Reevaluate Model Performance",
+                "Conduct Additional Fairness Testing",
+                "Increase Monitoring Frequency",
+                "Require Human Review",
+                "Restrict Automated Decisions",
+                "Initiate Model Retraining Review",
+                "Escalate to Risk and Compliance Teams",
+                "Document and Audit the Incident",
+            ],
+            key="m6_safeguards",
+        )
+
+        st.text_area(
+            "How would these safeguards address the identified risks?",
+            key="m6_safeguard_rationale",
+            height=120,
+            placeholder=(
+                "Connect your proposed safeguards to "
+                "specific monitoring findings."
+            ),
+        )
+
+        # ----------------------------------------------------
+        # OPERATIONAL RISK RATING
+        # ----------------------------------------------------
+
+        st.markdown("### Operational Risk Rating")
+
+        st.radio(
+            "Assign an overall risk rating.",
+            [
+                "Low",
+                "Moderate",
+                "High",
+            ],
+            key="m6_risk_rating",
+        )
+
+        st.text_area(
+            "Explain your risk rating.",
+            key="m6_risk_rationale",
+            height=100,
+            placeholder=(
+                "Consider potential harm, severity, "
+                "uncertainty, and existing controls."
+            ),
+        )
+
+        # ----------------------------------------------------
+        # ESCALATION RESPONSIBILITIES
+        # ----------------------------------------------------
+
+        st.markdown("### Escalation and Accountability")
+
+        st.multiselect(
+            "Who should be notified or involved?",
+            [
+                "Model Owner",
+                "Data Science Team",
+                "Model Risk Management",
+                "Compliance and Legal",
+                "Business Operations",
+                "Executive Risk Committee",
+                "Internal Audit",
+            ],
+            key="m6_escalation",
+        )
+
+        st.text_area(
+            "Describe the responsibilities of the selected stakeholders.",
+            key="m6_escalation_rationale",
+            height=110,
+            placeholder=(
+                "Explain who should investigate, "
+                "approve corrective actions, and "
+                "authorize resumption if needed."
+            ),
+        )
+
+        # ----------------------------------------------------
+        # RECOVERY CRITERIA
+        # ----------------------------------------------------
+
+        st.markdown("### Recovery and Return to Normal Operations")
+
+        st.text_area(
+            "What conditions must be met before normal operations can resume?",
+            key="m6_recovery",
+            height=130,
+            placeholder=(
+                "Identify the evidence, validation, "
+                "approvals, and monitoring conditions "
+                "required to close the incident."
+            ),
+        )
+
+        st.markdown(
+            """
+            **Next:** Open **Submit Incident Assessment**
+            to document and download your governance decision.
+            """
+        )
+
+    # --------------------------------------------------------
+    # TAB 4: SUBMIT INCIDENT ASSESSMENT
+    # --------------------------------------------------------
+
+    with tab_submit:
+
+        st.subheader("Submit Incident Assessment")
+
+        st.markdown(
+            """
+            Review your findings and recommendations before
+            generating your Module 6 assessment.
+
+            Your report will document the monitoring evidence,
+            governance policy assessment, operational response,
+            safeguards, escalation responsibilities, and
+            recovery criteria.
+            """
+        )
+
+        student_name = st.text_input(
+            "Student Name",
+            key="m6_student_name",
+        )
+
+        st.markdown("### Assessment Summary")
+
+        st.write(
+            "**Scenario:**",
+            st.session_state.get("m6_scenario", ""),
+        )
+
+        st.write(
+            "**Policy Assessment:**",
+            st.session_state.get("m6_policy_assessment", ""),
+        )
+
+        st.write(
+            "**Operational Response:**",
+            st.session_state.get("m6_response", ""),
+        )
+
+        st.write(
+            "**Risk Rating:**",
+            st.session_state.get("m6_risk_rating", ""),
+        )
+
+        st.markdown("### Final Governance Rationale")
+
+        st.text_area(
+            "Summarize your overall governance recommendation.",
+            key="m6_final_rationale",
+            height=150,
+            placeholder=(
+                "Explain how the monitoring evidence, "
+                "organizational guardrails, and potential "
+                "risks support your final recommendation."
+            ),
+        )
+
+        def report_text(value):
+            if isinstance(value, (list, tuple, set)):
+                return ", ".join(str(item) for item in value)
+            return str(value or "Not provided")
+
+        def generate_module6_pdf():
+            buffer = BytesIO()
+
+            doc = SimpleDocTemplate(
+                buffer,
+                pagesize=(8.5 * inch, 11 * inch),
+                rightMargin=48,
+                leftMargin=48,
+                topMargin=48,
+                bottomMargin=48,
+            )
+
+            styles = getSampleStyleSheet()
+            story = []
+
+            def add_heading(value):
+                story.append(
+                    Paragraph(
+                        escape(str(value)),
+                        styles["Heading2"],
+                    )
+                )
+
+            def add_text(value):
+                safe = escape(report_text(value)).replace(
+                    "\n", "<br/>"
+                )
+                story.append(
+                    Paragraph(safe, styles["BodyText"])
+                )
+                story.append(Spacer(1, 8))
+
+            story.append(
+                Paragraph(
+                    "Module 6: Monitoring and Guardrails",
+                    styles["Title"],
+                )
+            )
+
+            add_text("AI Governance Committee Incident Assessment")
+            add_text(f"Student: {student_name}")
+            add_text(
+                f"Date: {datetime.now().strftime('%B %d, %Y')}"
+            )
+            
+            # ------------------------------------------------
+            # MONITORING GUARDRAIL EVIDENCE
+            # ------------------------------------------------
+
+            add_heading("Monitoring Guardrail Summary")
+
+            add_text(
+                "The following results were calculated "
+                "from the selected monitoring scenario "
+                "using the simulation's monitoring rules."
+            )
+
+            from reportlab.platypus import (
+                Table as PDFTable,
+                TableStyle as PDFTableStyle,
+            )
+            from reportlab.lib import colors as pdf_colors
+
+            evidence_rows = [
+                ["Policy", "Observed", "Threshold", "Status"]
+            ]
+
+            for _, evidence in guardrail_summary.iterrows():
+                evidence_rows.append([
+                    str(evidence["Policy"]),
+                    str(evidence["Observed"]),
+                    str(evidence["Threshold"]),
+                    str(evidence["Status"]),
+                ])
+
+            evidence_table = PDFTable(
+                evidence_rows,
+                colWidths=[155, 75, 90, 105],
+                repeatRows=1,
+                hAlign="LEFT",
+            )
+
+            evidence_table.setStyle(
+                PDFTableStyle([
+                    (
+                        "BACKGROUND",
+                        (0, 0),
+                        (-1, 0),
+                        pdf_colors.lightgrey,
+                    ),
+                    (
+                        "GRID",
+                        (0, 0),
+                        (-1, -1),
+                        0.4,
+                        pdf_colors.grey,
+                    ),
+                    (
+                        "VALIGN",
+                        (0, 0),
+                        (-1, -1),
+                        "TOP",
+                    ),
+                    (
+                        "FONTSIZE",
+                        (0, 0),
+                        (-1, -1),
+                        8,
+                    ),
+                    (
+                        "LEFTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        6,
+                    ),
+                    (
+                        "RIGHTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        6,
+                    ),
+                    (
+                        "TOPPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        6,
+                    ),
+                    (
+                        "BOTTOMPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        6,
+                    ),
+                ])
+            )
+
+            story.append(evidence_table)
+            story.append(Spacer(1, 14))
+
+            add_text(
+                "M001 evaluates missing applicant data; "
+                "M002 evaluates invalid applicant records "
+                "using classroom validation assumptions; "
+                "M003 reports the maximum evaluated PSI; "
+                "M004 requires prediction scores and is "
+                "not evaluated with the current data. "
+                "An alert does not automatically require "
+                "suspending model operations."
+            )
+            
+            fields = [
+                ("Monitoring Scenario", "m6_scenario"),
+                ("Monitoring Findings", "m6_monitoring_findings"),
+                ("Additional Evidence Requested", "m6_additional_evidence"),
+                ("Guardrail Concerns", "m6_guardrail_concerns"),
+                ("Policy Assessment", "m6_policy_assessment"),
+                ("Policy Rationale", "m6_guardrail_rationale"),
+                ("Operational Response", "m6_response"),
+                ("Response Rationale", "m6_response_rationale"),
+                ("Recommended Safeguards", "m6_safeguards"),
+                ("Safeguard Rationale", "m6_safeguard_rationale"),
+                ("Operational Risk Rating", "m6_risk_rating"),
+                ("Risk Rationale", "m6_risk_rationale"),
+                ("Escalation Stakeholders", "m6_escalation"),
+                ("Escalation Responsibilities", "m6_escalation_rationale"),
+                ("Recovery Criteria", "m6_recovery"),
+                ("Final Governance Rationale", "m6_final_rationale"),
+            ]
+
+            for label, key in fields:
+                add_heading(label)
+                add_text(st.session_state.get(key, ""))
+
+            add_text(
+                "Educational simulation using synthetic lending data. "
+                "This assessment does not authorize deployment."
+            )
+
+            doc.build(story)
+            result = buffer.getvalue()
+            buffer.close()
+            return result
+
+        required_fields = [
+            "m6_monitoring_findings",
+            "m6_guardrail_rationale",
+            "m6_response_rationale",
+            "m6_safeguard_rationale",
+            "m6_risk_rationale",
+            "m6_recovery",
+            "m6_final_rationale",
+        ]
+
+        missing_fields = [
+            field for field in required_fields
+            if not str(st.session_state.get(field, "")).strip()
+        ]
+
+        if not student_name.strip():
+            st.warning("Enter your name before downloading.")
+
+        elif missing_fields:
+            st.warning(
+                "Complete all required written assessments "
+                "before downloading your report."
+            )
+
+        else:
+            pdf_bytes = generate_module6_pdf()
+
+            st.download_button(
+                "Download Module 6 Incident Assessment PDF",
+                data=pdf_bytes,
+                file_name="Module_6_Incident_Assessment.pdf",
+                mime="application/pdf",
+                key="m6_pdf_download",
+            )
+
+        st.info(
+            "Download your completed PDF before closing the "
+            "application. Submit the PDF through Canvas."
+        )
