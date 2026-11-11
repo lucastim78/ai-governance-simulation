@@ -65,6 +65,7 @@ def load_table(table_name):
         "governance_policies",
         "model_feature_importance",
         "model_fairness",
+        "monitoring_model_performance",
         "monitoring_policies",
         "monitoring_audit_log",
         "scenario_normal",
@@ -1209,6 +1210,10 @@ elif module == "Module 6: Guardrails & Monitoring":
         monitoring_policies = load_table("monitoring_policies")
         monitoring_audit = load_table("monitoring_audit_log")
 
+        monitoring_model_performance = load_table(
+            "monitoring_model_performance"
+        )
+
         monitoring_scenarios = {
             "Normal Operations": load_table("scenario_normal"),
             "Data Quality Issue": load_table("scenario_data_quality"),
@@ -1282,7 +1287,26 @@ elif module == "Module 6: Guardrails & Monitoring":
             key="m6_scenario",
         )
 
+
         scenario_df = monitoring_scenarios[selected_scenario]
+
+        # Retrieve model performance for the selected scenario
+        scenario_performance = monitoring_model_performance.loc[
+            monitoring_model_performance["scenario"] == selected_scenario
+        ]
+
+        if scenario_performance.empty:
+            st.error(
+                f"No model performance results found for {selected_scenario}"
+            )
+            st.stop()
+
+        scenario_auc = float(scenario_performance.iloc[0]["auc"])
+
+        # Evaluate M004 against the minimum AUC threshold
+        m004_status = "ALERT" if scenario_auc < 0.75 else "PASS"
+
+
         # ----------------------------------------------------
         # CONSOLIDATED MONITORING GUARDRAIL SUMMARY
         # ----------------------------------------------------
@@ -1487,12 +1511,12 @@ elif module == "Module 6: Guardrails & Monitoring":
                     max_psi_value, 0.20
                 ),
             },
-            {
-                "Policy": "M004 - Model AUC",
-                "Observed": "Unavailable",
-                "Threshold": "0.75 minimum",
-                "Status": "Not Evaluated",
-            },
+{
+    "Policy": "M004 - Model AUC",
+    "Observed": f"{scenario_auc:.4f}",
+    "Threshold": "0.75 minimum",
+    "Status": m004_status,
+},
         ])
 
         st.dataframe(
